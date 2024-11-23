@@ -4,7 +4,7 @@
 	"dir": "configs/",
 	"roadnetFile": "basic/basic_road_network.json", 
 	"flowFile": "basic/basic_flow.json", 
-	"rlTrafficLight": false,
+	"rlTrafficLight": true,
 	"laneChange": false,
 	"saveReplay": true,
 	"roadnetLogFile": "../logs/basic/basic_road_network_log.json", 
