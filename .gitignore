@@ -1,0 +1,19 @@
+# Virtual environments
+venv/
+.env
+
+# Python bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+
+
+# IDE/editor files
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# System files
+.DS_Store
+Thumbs.db
