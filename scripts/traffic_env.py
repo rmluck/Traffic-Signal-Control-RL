@@ -4,6 +4,7 @@ from gym import spaces
 import numpy as np
 import json
 import os
+from collections import defaultdict
 
 class TrafficSignalEnv(gym.Env):
     def __init__(self, max_steps, config_file="../configs/basic/basic_config.json", road_network_file="../configs/basic/basic_road_network.json", centralized=False):
@@ -17,7 +18,7 @@ class TrafficSignalEnv(gym.Env):
         self.intersections, self.roads, self.action_space = self._parse_network(road_network_file)
         self.num_intersections = len(self.intersections)
 
-        num_features = len(self.roads[next(iter(self.roads))]) * 2 + 1
+        num_features = len(self.roads[next(iter(self.roads))]) * 2
         if self.centralized:
             self.observation_space = spaces.Box(low=0, high=np.inf, shape=(self.num_intersections * num_features,), dtype=np.float32)
         else:
@@ -39,10 +40,13 @@ class TrafficSignalEnv(gym.Env):
     def _parse_network(self, road_network_file):
         with open(road_network_file, "r") as f:
             data = json.load(f)
-        intersections = data["intersections"]
-        lanes_by_road = {road["id"]: road["lanes"] for road in data["roads"]}
-        num_phases = max(len(intersection["trafficLight"]["lightphases"]) for intersection in intersections)
-        return intersections, lanes_by_road, spaces.Discrete(num_phases)
+        num_phases = max(len(intersection["trafficLight"]["lightphases"]) for intersection in data["intersections"])
+        lanes_by_road = defaultdict(list)
+        for road in data["roads"]:
+            base_id = road["id"]
+            for suffix in range(3):  # Suffixes _0, _1, _2
+                lanes_by_road[road["id"]].append(f"{base_id}_{suffix}")
+        return data["intersections"], lanes_by_road, spaces.Discrete(num_phases)
     
     def _get_observations(self):
         states = []
@@ -57,8 +61,7 @@ class TrafficSignalEnv(gym.Env):
                 vehicle_counts.extend([self.engine.get_lane_vehicle_count().get(lane, 0) for lane in lanes])
                 waiting_vehicle_counts.extend([self.engine.get_lane_waiting_vehicle_count().get(lane, 0) for lane in lanes])
 
-            current_phase = self.engine.get_current_phase(intersection["id"])
-            state = vehicle_counts + waiting_vehicle_counts + [current_phase]
+            state = vehicle_counts + waiting_vehicle_counts
             states.append(state)
         
         # Return global state (combine all intersection observations) if centralized, else return local states (one observation per intersection)
