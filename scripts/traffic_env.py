@@ -1,12 +1,12 @@
 import cityflow
-import gym
-from gym import spaces
+import gymnasium
+from gymnasium import spaces
 import numpy as np
 import json
 import os
 from collections import defaultdict
 
-class TrafficSignalEnv(gym.Env):
+class TrafficSignalEnv(gymnasium.Env):
     def __init__(self, max_steps, config_file="../configs/basic/basic_config.json", road_network_file="../configs/basic/basic_road_network.json", centralized=False):
         super().__init__()
         self.max_steps = max_steps
@@ -24,7 +24,7 @@ class TrafficSignalEnv(gym.Env):
         else:
             self.observation_space = spaces.Box(low=0, high=np.inf, shape=(self.num_intersections, num_features), dtype=np.float32)
     
-    def reset(self):
+    def reset(self, seed=None):
         self.engine.reset()
         self.previous_vehicle_count = self.engine.get_vehicle_count()
         return self._get_observations()
