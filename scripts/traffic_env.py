@@ -22,20 +22,20 @@ class TrafficSignalEnv(gymnasium.Env):
         if self.centralized:
             self.observation_space = spaces.Box(low=0, high=np.inf, shape=(self.num_intersections * num_features,), dtype=np.float32)
         else:
-            self.observation_space = spaces.Box(low=0, high=np.inf, shape=(self.num_intersections, num_features), dtype=np.float32)
+            self.observation_space = spaces.Box(low=0, high=np.inf, shape=(self.num_intersections, self.num_intersections * num_features), dtype=np.float32)
     
     def reset(self, seed=None):
         self.engine.reset()
         self.previous_vehicle_count = self.engine.get_vehicle_count()
-        return self._get_observations()
+        return self._get_observations(), {}
     
     def step(self, actions):
         self._apply_actions(actions)
         self.engine.next_step()
         observations = self._get_observations()
-        rewards = self._get_rewards()
-        done = self._is_done()
-        return observations, rewards, done, {}
+        rewards = np.sum(self._get_rewards())
+        truncated = self._is_done()
+        return observations, rewards, False, truncated, {}
     
     def _parse_network(self, road_network_file):
         with open(road_network_file, "r") as f:
@@ -73,9 +73,12 @@ class TrafficSignalEnv(gymnasium.Env):
             # Pad states for decentralized observation
             max_lanes = max(len(state) for state in states)
             padded_states = [state + [0] * (max_lanes - len(state)) for state in states]
-            return np.array(padded_states)
+            return np.array(padded_states).astype(np.float32)
     
     def _apply_actions(self, actions):
+        if isinstance(actions, (int, np.integer)):
+            actions = [actions]
+        
         intersection_ids = [intersection["id"] for intersection in self.intersections]
         for i, action in enumerate(actions):
             self.engine.set_tl_phase(intersection_ids[i], action)
