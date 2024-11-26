@@ -17,6 +17,13 @@ class TrafficSignalEnv(gymnasium.Env):
 
         self.intersections, self.roads, self.action_space = self._parse_network(road_network_file)
         self.num_intersections = len(self.intersections)
+        self.num_roads = len(self.roads)
+        self.num_lanes = sum([len(self.roads[road]) for road in self.roads])
+
+        # For debugging purposes only
+        self.max_observed_waiting_count = 0
+        self.max_observed_vehicle_count = 0
+        self.max_observed_throughput = 0
 
         num_features = len(self.roads[next(iter(self.roads))]) * 2
         if self.centralized:
@@ -35,6 +42,14 @@ class TrafficSignalEnv(gymnasium.Env):
         observations = self._get_observations()
         rewards = np.sum(self._get_rewards())
         truncated = self._is_done()
+        
+        # For debugging purposes only
+        if self.engine.get_current_time() % 10 == 0:
+            print(f"Step {self.engine.get_current_time()}: "
+                  f"Max Waiting Time: {round(self.max_observed_waiting_count, 3)}, "
+                  f"Max Vehicle Count: {round(self.max_observed_vehicle_count, 3)}, "
+                  f"Max Throughput: {round(self.max_observed_throughput, 3)}")
+
         return observations, rewards, False, truncated, {}
     
     def _parse_network(self, road_network_file):
@@ -55,14 +70,14 @@ class TrafficSignalEnv(gymnasium.Env):
         for intersection in self.intersections:
             incoming_roads = intersection["roads"]
             vehicle_counts = []
-            waiting_vehicle_counts = []
+            waiting_counts = []
 
             for road in incoming_roads:
                 lanes = self.roads[road]
                 vehicle_counts.extend([self.engine.get_lane_vehicle_count().get(lane, 0) for lane in lanes])
-                waiting_vehicle_counts.extend([self.engine.get_lane_waiting_vehicle_count().get(lane, 0) for lane in lanes])
+                waiting_counts.extend([self.engine.get_lane_waiting_vehicle_count().get(lane, 0) for lane in lanes])
 
-            state = vehicle_counts + waiting_vehicle_counts
+            state = vehicle_counts + waiting_counts
             states.append(state)
         
         # Return global state (combine all intersection observations) if centralized, else return local states (one observation per intersection)
@@ -88,12 +103,25 @@ class TrafficSignalEnv(gymnasium.Env):
         lane_waiting_counts = self.engine.get_lane_waiting_vehicle_count()
         throughput = (self.previous_vehicle_count - self.engine.get_vehicle_count()) / self.num_intersections
 
+        # Pre-defined constants (useful for now, eventually need to implement dynamic normalization during runtime when switching to larger grid sizes)
+        MAX_VEHICLE_COUNT = 87 * self.num_intersections
+        MAX_WAITING_COUNT = 44 * self.num_lanes
+        MAX_THROUGHPUT = 0.5 * self.num_intersections
+
         for intersection in self.intersections:
             incoming_roads = intersection["roads"]
-            total_waiting_time = sum(lane_waiting_counts.get(lane, 0) for road in incoming_roads for lane in self.roads[road])
             total_vehicle_count = sum(self.engine.get_lane_vehicle_count().get(lane, 0) for road in incoming_roads for lane in self.roads[road])
-            reward = -0.5 * total_waiting_time - 0.5 * total_vehicle_count + 1.0 * throughput
+            total_waiting_count = sum(lane_waiting_counts.get(lane, 0) for road in incoming_roads for lane in self.roads[road])
+            normalized_waiting_count = round(total_waiting_count / MAX_WAITING_COUNT, 3)
+            normalized_vehicle_count = round(total_vehicle_count / MAX_VEHICLE_COUNT, 3)
+            normalized_throughput = round(throughput / MAX_THROUGHPUT, 3)
+            reward = -0.5 * normalized_waiting_count - 0.5 * normalized_vehicle_count + 1.0 * normalized_throughput
             rewards.append(reward)
+
+            # For debugging purposes only
+            self.max_observed_waiting_count = max(self.max_observed_waiting_count, normalized_waiting_count)
+            self.max_observed_vehicle_count = max(self.max_observed_vehicle_count, normalized_vehicle_count)
+            self.max_observed_throughput = max(self.max_observed_throughput, normalized_throughput)
         
         self.previous_vehicle_count = self.engine.get_vehicle_count()
         return np.array(rewards)
@@ -111,6 +139,8 @@ if __name__ == "__main__":
     done = False
 
     while not done:
+        # Currently just choosing random actions since MAPPO not implemented yet
         actions = [environment.action_space.sample() for _ in range(environment.num_intersections)]
         observations, rewards, done, info = environment.step(actions)
+
         print(f"Actions: {actions}, Observations: {observations}, Rewards: {rewards}")
