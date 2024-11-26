@@ -19,17 +19,16 @@ class TrafficSignalEnv(gymnasium.Env):
         self.num_intersections = len(self.intersections)
         self.num_roads = len(self.roads)
         self.num_lanes = sum([len(self.roads[road]) for road in self.roads])
+        self.max_lanes = max([sum(len(self.roads[road]) for road in intersection["roads"]) * 2 for intersection in self.intersections])
 
-        # For debugging purposes only
         self.max_observed_waiting_count = 0
         self.max_observed_vehicle_count = 0
         self.max_observed_throughput = 0
 
-        num_features = len(self.roads[next(iter(self.roads))]) * 2
         if self.centralized:
-            self.observation_space = spaces.Box(low=0, high=np.inf, shape=(self.num_intersections * num_features,), dtype=np.float32)
+            self.observation_space = spaces.Box(low=0, high=np.inf, shape=(self.num_intersections * self.max_lanes,), dtype=np.float32)
         else:
-            self.observation_space = spaces.Box(low=0, high=np.inf, shape=(self.num_intersections, self.num_intersections * num_features), dtype=np.float32)
+            self.observation_space = spaces.Box(low=0, high=np.inf, shape=(self.num_intersections, self.max_lanes), dtype=np.float32)
     
     def reset(self, seed=None):
         self.engine.reset()
@@ -42,13 +41,6 @@ class TrafficSignalEnv(gymnasium.Env):
         observations = self._get_observations()
         rewards = np.sum(self._get_rewards())
         truncated = self._is_done()
-        
-        # For debugging purposes only
-        if self.engine.get_current_time() % 10 == 0:
-            print(f"Step {self.engine.get_current_time()}: "
-                  f"Max Waiting Time: {round(self.max_observed_waiting_count, 3)}, "
-                  f"Max Vehicle Count: {round(self.max_observed_vehicle_count, 3)}, "
-                  f"Max Throughput: {round(self.max_observed_throughput, 3)}")
 
         return observations, rewards, False, truncated, {}
     
@@ -86,8 +78,7 @@ class TrafficSignalEnv(gymnasium.Env):
             return np.concatenate([np.array(state) for state in states])
         else:
             # Pad states for decentralized observation
-            max_lanes = max(len(state) for state in states)
-            padded_states = [state + [0] * (max_lanes - len(state)) for state in states]
+            padded_states = [state + [0] * (self.max_lanes - len(state)) for state in states]
             return np.array(padded_states).astype(np.float32)
     
     def _apply_actions(self, actions):
@@ -118,7 +109,6 @@ class TrafficSignalEnv(gymnasium.Env):
             reward = -0.5 * normalized_waiting_count - 0.5 * normalized_vehicle_count + 1.0 * normalized_throughput
             rewards.append(reward)
 
-            # For debugging purposes only
             self.max_observed_waiting_count = max(self.max_observed_waiting_count, normalized_waiting_count)
             self.max_observed_vehicle_count = max(self.max_observed_vehicle_count, normalized_vehicle_count)
             self.max_observed_throughput = max(self.max_observed_throughput, normalized_throughput)
@@ -141,6 +131,6 @@ if __name__ == "__main__":
     while not done:
         # Currently just choosing random actions since MAPPO not implemented yet
         actions = [environment.action_space.sample() for _ in range(environment.num_intersections)]
-        observations, rewards, done, info = environment.step(actions)
+        observations, rewards, terminal, done, info = environment.step(actions)
 
-        print(f"Actions: {actions}, Observations: {observations}, Rewards: {rewards}")
+        print(f"Rewards: {rewards}")
