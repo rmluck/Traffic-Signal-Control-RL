@@ -7,6 +7,6 @@
 	"rlTrafficLight": true,
 	"laneChange": false,
 	"saveReplay": true,
-	"roadnetLogFile": "../logs/basic/basic_road_network_log.json", 
-	"replayLogFile": "../logs/basic/basic_replay.txt"
+	"roadnetLogFile": "logs/basic/basic_road_network_log.json", 
+	"replayLogFile": "logs/basic/basic_replay.txt"
 }
