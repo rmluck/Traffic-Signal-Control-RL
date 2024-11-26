@@ -32,7 +32,7 @@ class TrafficSignalEnv(gym.Env):
     def step(self, actions):
         self._apply_actions(actions)
         self.engine.next_step()
-        observations = self._get_observations(self.centralized)
+        observations = self._get_observations()
         rewards = self._get_rewards()
         done = self._is_done()
         return observations, rewards, done, {}
@@ -40,23 +40,24 @@ class TrafficSignalEnv(gym.Env):
     def _parse_network(self, road_network_file):
         with open(road_network_file, "r") as f:
             data = json.load(f)
-        num_phases = max(len(intersection["trafficLight"]["lightphases"]) for intersection in data["intersections"])
+        intersections = data["intersections"]
+        num_phases = max(len(intersection["trafficLight"]["lightphases"]) for intersection in intersections)
         lanes_by_road = defaultdict(list)
         for road in data["roads"]:
             base_id = road["id"]
             for suffix in range(3):  # Suffixes _0, _1, _2
                 lanes_by_road[road["id"]].append(f"{base_id}_{suffix}")
-        return data["intersections"], lanes_by_road, spaces.Discrete(num_phases)
+        return intersections, lanes_by_road, spaces.Discrete(num_phases)
     
     def _get_observations(self):
         states = []
         # Currently retrieves vehicle count and waiting vehicle count, can add waiting time and other potential features later (more complicated)
         for intersection in self.intersections:
-            roads = intersection["roads"]
+            incoming_roads = intersection["roads"]
             vehicle_counts = []
             waiting_vehicle_counts = []
 
-            for road in roads:
+            for road in incoming_roads:
                 lanes = self.roads[road]
                 vehicle_counts.extend([self.engine.get_lane_vehicle_count().get(lane, 0) for lane in lanes])
                 waiting_vehicle_counts.extend([self.engine.get_lane_waiting_vehicle_count().get(lane, 0) for lane in lanes])
@@ -65,7 +66,14 @@ class TrafficSignalEnv(gym.Env):
             states.append(state)
         
         # Return global state (combine all intersection observations) if centralized, else return local states (one observation per intersection)
-        return np.array(states).flatten() if self.centralized else np.array(states)
+        if self.centralized:
+            # Flatten dynamically (padding is unnecessary for centralized training)
+            return np.concatenate([np.array(state) for state in states])
+        else:
+            # Pad states for decentralized observation
+            max_lanes = max(len(state) for state in states)
+            padded_states = [state + [0] * (max_lanes - len(state)) for state in states]
+            return np.array(padded_states)
     
     def _apply_actions(self, actions):
         intersection_ids = [intersection["id"] for intersection in self.intersections]
@@ -78,9 +86,9 @@ class TrafficSignalEnv(gym.Env):
         throughput = (self.previous_vehicle_count - self.engine.get_vehicle_count()) / self.num_intersections
 
         for intersection in self.intersections:
-            roads = intersection["roads"]
-            total_waiting_time = sum(lane_waiting_counts.get(lane, 0) for road in roads for lane in self.roads[road])
-            total_vehicle_count = sum(self.engine.get_lane_vehicle_count().get(lane, 0) for road in roads for lane in self.roads[road])
+            incoming_roads = intersection["roads"]
+            total_waiting_time = sum(lane_waiting_counts.get(lane, 0) for road in incoming_roads for lane in self.roads[road])
+            total_vehicle_count = sum(self.engine.get_lane_vehicle_count().get(lane, 0) for road in incoming_roads for lane in self.roads[road])
             reward = -0.5 * total_waiting_time - 0.5 * total_vehicle_count + 1.0 * throughput
             rewards.append(reward)
         
