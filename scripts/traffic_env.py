@@ -3,13 +3,14 @@ import gym
 from gym import spaces
 import numpy as np
 import json
+import os
 
 class TrafficSignalEnv(gym.Env):
-    def __init__(self, num_intersections, max_steps, config_file="../configs/basic/basic_config.json", road_network_file="../configs/basic/basic_road_network.json"):
+    def __init__(self, max_steps, config_file="../configs/basic/basic_config.json", road_network_file="../configs/basic/basic_road_network.json"):
         super().__init__()
         self.max_steps = max_steps
-        self.config_file = config_file
-        self.road_network_file = road_network_file
+        self.config_file = os.path.abspath(config_file)
+        self.road_network_file = os.path.abspath(road_network_file)
         self.engine = cityflow.Engine(config_file, thread_num=1)
 
         self.intersections, self.action_space, self.roads = self._parse_network(road_network_file)
