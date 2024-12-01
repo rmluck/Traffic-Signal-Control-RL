@@ -21,6 +21,7 @@ class TrafficSignalEnv(gymnasium.Env):
         self.num_lanes = sum([len(self.roads[road]) for road in self.roads])
         self.max_lanes = max([sum(len(self.roads[road]) for road in intersection["roads"]) * 2 for intersection in self.intersections])
 
+        self.previous_vehicle_count = self.engine.get_vehicle_count()
         self.max_observed_waiting_count = 0
         self.max_observed_vehicle_count = 0
         self.max_observed_throughput = 0
@@ -38,6 +39,7 @@ class TrafficSignalEnv(gymnasium.Env):
     def step(self, actions):
         self._apply_actions(actions)
         self.engine.next_step()
+        self.previous_vehicle_count = self.engine.get_vehicle_count()
         observations = self._get_observations()
         rewards = np.sum(self._get_rewards())
         truncated = self._is_done()
@@ -92,7 +94,7 @@ class TrafficSignalEnv(gymnasium.Env):
     def _get_rewards(self):
         rewards = []
         lane_waiting_counts = self.engine.get_lane_waiting_vehicle_count()
-        throughput = (self.previous_vehicle_count - self.engine.get_vehicle_count()) / self.num_intersections
+        throughput = max(0,(self.previous_vehicle_count - self.engine.get_vehicle_count()) / self.num_intersections)
 
         # Pre-defined constants (useful for now, eventually need to implement dynamic normalization during runtime when switching to larger grid sizes)
         MAX_VEHICLE_COUNT = 87 * self.num_intersections
@@ -123,14 +125,22 @@ if __name__ == "__main__":
     config_file = "../configs/basic/basic_config.json"
     road_network_file = "../configs/basic/basic_road_network.json"
     max_steps = 100
-    environment = TrafficSignalEnv(max_steps, config_file, road_network_file, False)
+    env = TrafficSignalEnv(max_steps, config_file, road_network_file, False)
 
-    observations = environment.reset()
+    obs = env.reset()
     done = False
-
+    total_reward = 0
     while not done:
-        # Currently just choosing random actions since MAPPO not implemented yet
-        actions = [environment.action_space.sample() for _ in range(environment.num_intersections)]
-        observations, rewards, terminal, done, info = environment.step(actions)
+        action = env.action_space.sample()  # Random action
+        obs, reward, _, done, info = env.step(action)
+        print(f"Step Reward: {reward}")
+        total_reward += reward
+    print(f"Total Reward for Random Actions: {total_reward}")
 
-        print(f"Rewards: {rewards}")
+
+    # while not done:
+    #     # Currently just choosing random actions since MAPPO not implemented yet
+    #     actions = [environment.action_space.sample() for _ in range(environment.num_intersections)]
+    #     observations, rewards, terminal, done, info = environment.step(actions)
+
+    #     print(f"Rewards: {rewards}")
