@@ -17,6 +17,7 @@ NEXT STEPS:
     - Adjust training parameters like gamma, train_batch_size, minibatch_size, num_epochs, grad_clip, clip_param
     - Add entropy_coeff parameter to encourage exploration early in training
     - Add num_sgd_iter parameter (number of gradient updates per iteration)
+    - Experiment with lower or higher learning rates to observe their effect on stability
     - Experiment w/ shared policies (all agents share single policy) vs. independent policies (unique policy for each agent)
     - Can use grid search or Ray Tune for automated hyperparameter tuning
         from ray.tune import run
@@ -44,6 +45,7 @@ NEXT STEPS:
     - Ensure reward function minimizes congestion, maximizes throughput
     - Monitor components of reward function (normalized metrics)
     - Adjust coefficients for better balance
+    - Add additional penalties or bonuses to steer policy more effectively
 8. Validate system
     - Compare performance with baseline methods (fixed signal durations, rule-based strategies, random signal switching)
 9. Save and load models
@@ -108,7 +110,39 @@ ppo = PPO(config=ppo_config)
 # Training loop
 for i in range(50):  # Number of training iterations
     result = ppo.train()
-    print(f"Iteration {i}: Result = {result}")
+
+    print(f"\nIteration {i}")
+
+    # print(f"\tTraining Info:")
+    # print(f"\t\tTime This Iteration: " + str(result["time_this_iter_s"]) + "s")
+    # print(f"\t\tTotal Time: " + str(result["time_total_s"]) + "s")
+    
+    # print(f"\tAgent Metrics:")
+    # for i in range(len(result["info"]["learner"])):
+    #     print(f"\t\tAgent {i}")
+    #     info_learner = result["info"]["learner"][f"agent_{i}"]["learner_stats"]
+        # print(f"\t\t\tTotal Loss: " + str(info_learner["total_loss"]) + ", " + "Policy Loss: " + str(info_learner["policy_loss"]) + ", " + "VF Loss: " + str(info_learner["vf_loss"]) + ", " + "Entropy: " + str(info_learner["entropy"]) + ", " + "KL: " + str(info_learner["kl"]) + ", " + "Current Learning Rate: " + str(info_learner["cur_lr"]) + ", " + "VF Explained by Value Function: " + str(info_learner["vf_explained_var"]))
+        # print(f"\t\t\tTotal Loss: " + str(info_learner["total_loss"]) + " (how well agent is learning overall)")
+        # print(f"\t\t\tPolicy Loss: " + str(info_learner["policy_loss"]) + " (indicates agent's optimization on policy)")
+        # print(f"\t\t\tVF Loss: " + str(info_learner["vf_loss"]) + " (optimization of value function)")
+        # print(f"\t\t\tEntropy: " + str(info_learner["entropy"]) + " (insight into exploration, higher entropy means more exploration)")
+        # print(f"\t\t\tKL: " + str(info_learner["kl"]) + " (measures divergence between current policy and previous policies, useful for stability monitoring)")
+        # print(f"\t\t\tCurrent Learning Rate: " + str(info_learner["cur_lr"]) + " (current learning rate, helps identify if learning rate schedules are being applied correctly)")
+        # print(f"\t\t\tVF Explained by Value Function: " + str(info_learner["vf_explained_var"]) + " (variance explained by value function, assessing model performance)")
+
+    env_runners = result["env_runners"]
+    # print(f"\tEnvironment Metrics:")
+    # print(f"\t\tMean Reward: " + str(env_runners["episode_reward_mean"]) + ", " + "Mean Episode Length: " + str(env_runners["episode_len_mean"]))
+    print(f"\tMean Reward: " + str(env_runners["episode_reward_mean"]) + " (average reward per episode, reflecting overall performance)")
+    # print(f"\t\tMean Reward: " + str(env_runners["episode_reward_mean"]) + " (average reward per episode, reflecting overall performance)")
+    # print(f"\t\tMean Episode Length: " + str(env_runners["episode_len_mean"]) + " (average length of episodes, indicating task difficulty or agent efficiency)")
+    
+    # print(f"\tSystem Metrics:")
+    # print(f"\t\tLearn Time: " + str(result["timers"]["learn_time_ms"]) + "ms, " + "Steps Sampled: " + str(result["num_env_steps_sampled"]) + ", " + "Throughput: " + str(result["timers"]["learn_throughput"]) + " steps/s")
+    # print(f"\t\tLearn Time: " + str(result["timers"]["learn_time_ms"]) + "ms (time spent in learning phase per iteration)")
+    # print(f"\t\tSteps Sampled: " + str(result["num_env_steps_sampled"]) + " (progress of sampling in environment)")
+    # print(f"\t\tThroughput: " + str(result["timers"]["learn_throughput"]) + " steps/s (measures training throughput, reflecting efficiency)")
+
     # print(f"Iteration {i}: Mean Reward = {result['episode_reward_mean']}")
 
 # Save trained model
