@@ -39,7 +39,6 @@ class TrafficSignalEnv(gymnasium.Env):
     def step(self, actions):
         self._apply_actions(actions)
         self.engine.next_step()
-        self.previous_vehicle_count = self.engine.get_vehicle_count()
         observations = self._get_observations()
         rewards = np.sum(self._get_rewards())
         truncated = self._is_done()
@@ -94,6 +93,8 @@ class TrafficSignalEnv(gymnasium.Env):
     def _get_rewards(self):
         rewards = []
         lane_waiting_counts = self.engine.get_lane_waiting_vehicle_count()
+        print(f"current:{self.engine.get_vehicle_count()}")
+        print(f"prev:{self.previous_vehicle_count}")
         throughput = max(0,(self.previous_vehicle_count - self.engine.get_vehicle_count()) / self.num_intersections)
 
         # Pre-defined constants (useful for now, eventually need to implement dynamic normalization during runtime when switching to larger grid sizes)
