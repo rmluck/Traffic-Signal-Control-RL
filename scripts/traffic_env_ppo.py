@@ -1,6 +1,7 @@
-import ray
 from ray import tune
 from ray.rllib.algorithms.ppo import PPO, PPOConfig
+from ray.tune.schedulers import ASHAScheduler
+from ray.air.config import RunConfig
 from ray.tune.registry import register_env
 from traffic_env import TrafficSignalEnv
 import warnings
@@ -105,83 +106,145 @@ ppo_config = (
     .api_stack(enable_rl_module_and_learner=False, enable_env_runner_and_connector_v2=False)
 )
 
-# Create and train PPO algorithm
-ppo = PPO(config=ppo_config)
 
-# Training loop
-with open("training_log.txt", "w") as log_file:
-    for i in range(50):  # Number of training iterations
-        result = ppo.train()
+if __name__ == "__main__":
+    def trainable(config):
+        # Create PPO configuration
+        ppo_config = (
+            PPOConfig()
+            .environment(env="TrafficSignalEnv", env_config=config["env_config"])
+            .framework("torch")
+            .training(
+                gamma=config["gamma"],
+                train_batch_size=config["train_batch_size"],
+                num_sgd_iter=config["num_sgd_iter"],
+                clip_param=config["clip_param"],
+                entropy_coeff=config["entropy_coeff"],
+                lr=config["lr"],
+            )
+            .multi_agent(
+                policies=config["policies"],
+                policy_mapping_fn=config["policy_mapping_fn"],
+            )
+        )
+        algo = ppo_config.build()
+        for _ in range(config["num_iterations"]):
+            result = algo.train()
+            tune.report(mean_reward=result["episode_reward_mean"])
+        algo.stop()
 
-        log_file.write(f"\nIteration {i}\n")
-        # print(f"\nIteration {i}")
+    search_space = {
+        "gamma": tune.grid_search([0.95, 0.99]),
+        "clip_param": tune.grid_search([0.1, 0.2]),
+        "entropy_coeff": tune.grid_search([0.005, 0.01, 0.02]),
+        "lr": tune.loguniform(1e-5, 1e-3),
+        "train_batch_size": tune.choice([1024, 2048]),
+        "num_sgd_iter": tune.choice([5, 10, 20]),
+        "env_config": { "max_steps": 1000},  # Example environment config
+        "policies": {
+            f"agent_{i}": (None, env.observation_space[f"agent_{i}"], env.action_space[f"agent_{i}"], {}) for i in range(env.num_intersections)
+        },
+        "policy_mapping_fn": lambda agent_id: "policy_1",
+        "num_iterations": 100,
+    }
 
-        # print(f"\tTraining Info:")
-        # print(f"\t\tTime This Iteration: " + str(result["time_this_iter_s"]) + "s")
-        # print(f"\t\tTotal Time: " + str(result["time_total_s"]) + "s")
-        
-        # print(f"\tAgent Metrics:")
-        # for i in range(len(result["info"]["learner"])):
-        #     print(f"\t\tAgent {i}")
-        #     info_learner = result["info"]["learner"][f"agent_{i}"]["learner_stats"]
-            # print(f"\t\t\tTotal Loss: " + str(info_learner["total_loss"]) + ", " + "Policy Loss: " + str(info_learner["policy_loss"]) + ", " + "VF Loss: " + str(info_learner["vf_loss"]) + ", " + "Entropy: " + str(info_learner["entropy"]) + ", " + "KL: " + str(info_learner["kl"]) + ", " + "Current Learning Rate: " + str(info_learner["cur_lr"]) + ", " + "VF Explained by Value Function: " + str(info_learner["vf_explained_var"]))
-            # print(f"\t\t\tTotal Loss: " + str(info_learner["total_loss"]) + " (how well agent is learning overall)")
-            # print(f"\t\t\tPolicy Loss: " + str(info_learner["policy_loss"]) + " (indicates agent's optimization on policy)")
-            # print(f"\t\t\tVF Loss: " + str(info_learner["vf_loss"]) + " (optimization of value function)")
-            # print(f"\t\t\tEntropy: " + str(info_learner["entropy"]) + " (insight into exploration, higher entropy means more exploration)")
-            # print(f"\t\t\tKL: " + str(info_learner["kl"]) + " (measures divergence between current policy and previous policies, useful for stability monitoring)")
-            # print(f"\t\t\tCurrent Learning Rate: " + str(info_learner["cur_lr"]) + " (current learning rate, helps identify if learning rate schedules are being applied correctly)")
-            # print(f"\t\t\tVF Explained by Value Function: " + str(info_learner["vf_explained_var"]) + " (variance explained by value function, assessing model performance)")
+    scheduler = ASHAScheduler(
+        metric="mean_reward",
+        mode="max",
+        max_t=100,
+        grace_period=10,
+        reduction_factor=2,
+    )
+    tuner = tune.Tuner(
+        trainable,
+        param_space=search_space,
+        tune_config=tune.TuneConfig(
+            num_samples=10,  # Number of configurations to sample
+            scheduler=scheduler,
+        ),
+        run_config=RunConfig(),
+    )
 
-        env_runners = result["env_runners"]
-        # print(f"\tEnvironment Metrics:")
-        # print(f"\t\tMean Reward: " + str(env_runners["episode_reward_mean"]) + ", " + "Mean Episode Length: " + str(env_runners["episode_len_mean"]))
-        log_file.write(f"\tMean Reward: {env_runners['episode_reward_mean']} (average reward per episode, reflecting overall performance)\n")
-        # print(f"\tMean Reward: " + str(env_runners["episode_reward_mean"]) + " (average reward per episode, reflecting overall performance)")
-        # print(f"\t\tMean Episode Length: " + str(env_runners["episode_len_mean"]) + " (average length of episodes, indicating task difficulty or agent efficiency)")
-        
-        # print(f"\tSystem Metrics:")
-        # print(f"\t\tLearn Time: " + str(result["timers"]["learn_time_ms"]) + "ms, " + "Steps Sampled: " + str(result["num_env_steps_sampled"]) + ", " + "Throughput: " + str(result["timers"]["learn_throughput"]) + " steps/s")
-        # print(f"\t\tLearn Time: " + str(result["timers"]["learn_time_ms"]) + "ms (time spent in learning phase per iteration)")
-        # print(f"\t\tSteps Sampled: " + str(result["num_env_steps_sampled"]) + " (progress of sampling in environment)")
-        # print(f"\t\tThroughput: " + str(result["timers"]["learn_throughput"]) + " steps/s (measures training throughput, reflecting efficiency)")
+    # Run tuning
+    results = tuner.fit()
 
-        # print(f"Iteration {i}: Mean Reward = {result['episode_reward_mean']}")
+    # Create and train PPO algorithm
+    # ppo = PPO(config=ppo_config)
 
-# Save trained model
-ppo.save("mappo_traffic_model")
+    # # Training loop
+    # with open("training_log.txt", "w") as log_file:
+    #     for i in range(50):  # Number of training iterations
+    #         result = ppo.train()
+
+    #         log_file.write(f"\nIteration {i}\n")
+    #         # print(f"\nIteration {i}")
+
+    #         # print(f"\tTraining Info:")
+    #         # print(f"\t\tTime This Iteration: " + str(result["time_this_iter_s"]) + "s")
+    #         # print(f"\t\tTotal Time: " + str(result["time_total_s"]) + "s")
+            
+    #         # print(f"\tAgent Metrics:")
+    #         # for i in range(len(result["info"]["learner"])):
+    #         #     print(f"\t\tAgent {i}")
+    #         #     info_learner = result["info"]["learner"][f"agent_{i}"]["learner_stats"]
+    #             # print(f"\t\t\tTotal Loss: " + str(info_learner["total_loss"]) + ", " + "Policy Loss: " + str(info_learner["policy_loss"]) + ", " + "VF Loss: " + str(info_learner["vf_loss"]) + ", " + "Entropy: " + str(info_learner["entropy"]) + ", " + "KL: " + str(info_learner["kl"]) + ", " + "Current Learning Rate: " + str(info_learner["cur_lr"]) + ", " + "VF Explained by Value Function: " + str(info_learner["vf_explained_var"]))
+    #             # print(f"\t\t\tTotal Loss: " + str(info_learner["total_loss"]) + " (how well agent is learning overall)")
+    #             # print(f"\t\t\tPolicy Loss: " + str(info_learner["policy_loss"]) + " (indicates agent's optimization on policy)")
+    #             # print(f"\t\t\tVF Loss: " + str(info_learner["vf_loss"]) + " (optimization of value function)")
+    #             # print(f"\t\t\tEntropy: " + str(info_learner["entropy"]) + " (insight into exploration, higher entropy means more exploration)")
+    #             # print(f"\t\t\tKL: " + str(info_learner["kl"]) + " (measures divergence between current policy and previous policies, useful for stability monitoring)")
+    #             # print(f"\t\t\tCurrent Learning Rate: " + str(info_learner["cur_lr"]) + " (current learning rate, helps identify if learning rate schedules are being applied correctly)")
+    #             # print(f"\t\t\tVF Explained by Value Function: " + str(info_learner["vf_explained_var"]) + " (variance explained by value function, assessing model performance)")
+
+    #         env_runners = result["env_runners"]
+    #         # print(f"\tEnvironment Metrics:")
+    #         # print(f"\t\tMean Reward: " + str(env_runners["episode_reward_mean"]) + ", " + "Mean Episode Length: " + str(env_runners["episode_len_mean"]))
+    #         log_file.write(f"\tMean Reward: {env_runners['episode_reward_mean']} (average reward per episode, reflecting overall performance)\n")
+    #         # print(f"\tMean Reward: " + str(env_runners["episode_reward_mean"]) + " (average reward per episode, reflecting overall performance)")
+    #         # print(f"\t\tMean Episode Length: " + str(env_runners["episode_len_mean"]) + " (average length of episodes, indicating task difficulty or agent efficiency)")
+            
+    #         # print(f"\tSystem Metrics:")
+    #         # print(f"\t\tLearn Time: " + str(result["timers"]["learn_time_ms"]) + "ms, " + "Steps Sampled: " + str(result["num_env_steps_sampled"]) + ", " + "Throughput: " + str(result["timers"]["learn_throughput"]) + " steps/s")
+    #         # print(f"\t\tLearn Time: " + str(result["timers"]["learn_time_ms"]) + "ms (time spent in learning phase per iteration)")
+    #         # print(f"\t\tSteps Sampled: " + str(result["num_env_steps_sampled"]) + " (progress of sampling in environment)")
+    #         # print(f"\t\tThroughput: " + str(result["timers"]["learn_throughput"]) + " steps/s (measures training throughput, reflecting efficiency)")
+
+    #         # print(f"Iteration {i}: Mean Reward = {result['episode_reward_mean']}")
+
+    # # Save trained model
+    # ppo.save("mappo_traffic_model")
 
 
 
-#####################################################################################
+    #####################################################################################
 
 
-# from traffic_env import TrafficSignalEnv
-# from stable_baselines3 import PPO
-# # from stable_baselines3.common.env_checker import check_env
-# from stable_baselines3.common.monitor import Monitor
-# from stable_baselines3.common.evaluation import evaluate_policy
+    # from traffic_env import TrafficSignalEnv
+    # from stable_baselines3 import PPO
+    # # from stable_baselines3.common.env_checker import check_env
+    # from stable_baselines3.common.monitor import Monitor
+    # from stable_baselines3.common.evaluation import evaluate_policy
 
-# # Check the custom environment for compatibility issues
-# base_env = TrafficSignalEnv(max_steps=1000, centralized=False)  # Adjust max_steps or centralized based on preference
-# env = Monitor(base_env)
-# # check_env(env)
+    # # Check the custom environment for compatibility issues
+    # base_env = TrafficSignalEnv(max_steps=1000, centralized=False)  # Adjust max_steps or centralized based on preference
+    # env = Monitor(base_env)
+    # # check_env(env)
 
-# model = PPO(
-#     policy='MlpPolicy',
-#     env=env,
-#     n_steps=2048,  # Number of steps to run for each update
-#     batch_size=64,  # Size of minibatches for SGD
-#     gae_lambda=0.95,  # Generalized Advantage Estimation parameter
-#     gamma=0.99,  # Discount factor
-#     clip_range=0.2,  # PPO clipping range
-#     ent_coef=0.01,  # Entropy coefficient to encourage exploration
-#     vf_coef=0.5,  # Value function coefficient
-#     max_grad_norm=0.5,  # Max norm for gradient clipping
-#     verbose=1  # Show training progress
-# )
-# model.learn(total_timesteps=100000)
+    # model = PPO(
+    #     policy='MlpPolicy',
+    #     env=env,
+    #     n_steps=2048,  # Number of steps to run for each update
+    #     batch_size=64,  # Size of minibatches for SGD
+    #     gae_lambda=0.95,  # Generalized Advantage Estimation parameter
+    #     gamma=0.99,  # Discount factor
+    #     clip_range=0.2,  # PPO clipping range
+    #     ent_coef=0.01,  # Entropy coefficient to encourage exploration
+    #     vf_coef=0.5,  # Value function coefficient
+    #     max_grad_norm=0.5,  # Max norm for gradient clipping
+    #     verbose=1  # Show training progress
+    # )
+    # model.learn(total_timesteps=100000)
 
-# mean_reward, std_reward = evaluate_policy(model, env, n_eval_episodes=10)
+    # mean_reward, std_reward = evaluate_policy(model, env, n_eval_episodes=10)
 
-# print(f"Mean reward: {mean_reward} +/- {std_reward}")
+    # print(f"Mean reward: {mean_reward} +/- {std_reward}")
