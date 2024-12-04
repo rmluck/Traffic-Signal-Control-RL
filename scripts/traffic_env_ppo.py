@@ -1,11 +1,13 @@
-from ray import tune
 from ray.rllib.algorithms.ppo import PPO, PPOConfig
-from ray.tune.schedulers import ASHAScheduler
 from ray.air.config import RunConfig
+from ray import tune
+from ray.tune import grid_search
+from ray.tune.schedulers import ASHAScheduler
 from ray.tune.registry import register_env
 from traffic_env import TrafficSignalEnv
 import warnings
 import os
+from pathlib import Path
 
 """
 NEXT STEPS:
@@ -61,6 +63,7 @@ NEXT STEPS:
 
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 os.environ["RLLIB_DISABLE_NEW_API_STACK"] = "True"
+storage_path = Path("../logs/ray_results").resolve().as_posix()
 
 # Define environment configuration
 env_config = {
@@ -85,31 +88,68 @@ policies = {
 def policy_mapping_fn(agent_id, episode, **kwargs):
     return agent_id
 
-# Correct way to initialize PPOConfig and apply configurations
-ppo_config = (
-    PPOConfig()
-    .environment(env="TrafficSignalEnv", env_config=env_config)
-    .framework("torch")
-    .env_runners(num_env_runners=4, rollout_fragment_length="auto")
-    .training(
-        gamma=0.99, # Discount factor
-        train_batch_size=2048, # Total batch size for training
-        minibatch_size=64, # Minibatch size
-        num_epochs=10, # Number of epochs to iterate over each batch
-        grad_clip=0.5, # Gradient clipping value
-        clip_param=0.2, # Clipping parameter for PPO
+def train_PPO():
+    # Initialize PPOConfig and apply configurations
+    ppo_config = (
+        PPOConfig()
+        .environment(env="TrafficSignalEnv", env_config=env_config)
+        .framework("torch")
+        .env_runners(num_env_runners=4, rollout_fragment_length="auto")
+        .training(
+            gamma=0.99, # Discount factor
+            train_batch_size=2048, # Total batch size for training
+            minibatch_size=64, # Minibatch size
+            num_epochs=10, # Number of epochs to iterate over each batch
+            grad_clip=0.5, # Gradient clipping value
+            clip_param=0.2, # Clipping parameter for PPO
+        )
+        .multi_agent(
+            policies=policies,
+            policy_mapping_fn=policy_mapping_fn,
+        )
+        .api_stack(enable_rl_module_and_learner=False, enable_env_runner_and_connector_v2=False)
     )
-    .multi_agent(
-        policies=policies,
-        policy_mapping_fn=policy_mapping_fn,
-    )
-    .api_stack(enable_rl_module_and_learner=False, enable_env_runner_and_connector_v2=False)
-)
 
+    # Create and train PPO algorithm
+    ppo = PPO(config=ppo_config)
 
-if __name__ == "__main__":
+    # Training loop
+    with open("training_log.txt", "w") as log_file:
+        for i in range(50): # Number of training iterations
+            result = ppo.train()
+
+            log_file.write(f"\nIteration {i}\n")
+
+            # log_file.write(f"\tTraining Info:")
+            # log_file.write(f"\t\tTime This Iteration: " + str(result["time_this_iter_s"]) + "s")
+            # log_file.write(f"\t\tTotal Time: " + str(result["time_total_s"]) + "s")
+
+            # log_file.write(f"\tAgent Metrics:")
+            # for i in range(len(result["info"]["learner"])):
+            #     log_file.write(f"\t\tAgent {i}")
+            #     info_learner = result["info"]["learner"][f"agent_{i}"]["learner_stats"]
+            #     log_file.write(f"\t\t\tTotal Loss: " + str(info_learner["total_loss"]) + " (how well agent is learning overall)")
+            #     log_file.write(f"\t\t\tPolicy Loss: " + str(info_learner["policy_loss"]) + " (indicates agent's optimization on policy)")
+            #     log_file.write(f"\t\t\tVF Loss: " + str(info_learner["vf_loss"]) + " (optimization of value function)")
+            #     log_file.write(f"\t\t\tEntropy: " + str(info_learner["entropy"]) + " (insight into exploration, higher entropy means more exploration)")
+            #     log_file.write(f"\t\t\tKL: " + str(info_learner["kl"]) + " (measures divergence between current policy and previous policies, useful for stability monitoring)")
+            #     log_file.write(f"\t\t\tCurrent Learning Rate: " + str(info_learner["cur_lr"]) + " (current learning rate, helps identify if learning rate schedules are being applied correctly)")
+            #     log_file.write(f"\t\t\tVF Explained by Value Function: " + str(info_learner["vf_explained_var"]) + " (variance explained by value function, assessing model performance)")
+
+            env_runners = result["env_runners"]
+            # log_file.write(f"\tEnvironment Metrics:")
+            log_file.write(f"\tMean Reward: " + str(env_runners['episode_reward_mean']) + " (average reward per episode, reflecting overall performance)\n")
+            # log_file.write(f"\t\tMean Reward: " + str(env_runners["episode_reward_mean"]) + " (average reward per episode, reflecting overall performance)")
+            # log_file.write(f"\t\tMean Episode Length: " + str(env_runners["episode_len_mean"]) + " (average length of episodes, indicating task difficulty or agent efficiency)")
+
+            # log_file.write(f"\tSystem Metrics:")
+            # log_file.write(f"\t\tLearn Time: " + str(result["timers"]["learn_time_ms"]) + "ms (time spent in learning phase per iteration)")
+            # log_file.write(f"\t\tSteps Sampled: " + str(result["num_env_steps_sampled"]) + " (progress of sampling in environment)")
+            # log_file.write(f"\t\tThroughput: " + str(result["timers"]["learn_throughput"]) + " steps/s (measures training throughput, reflecting efficiency)")
+
+def tune_PPO():
     def trainable(config):
-        # Create PPO configuration
+        # Initialize PPOConfig and apply configurations
         ppo_config = (
             PPOConfig()
             .environment(env="TrafficSignalEnv", env_config=config["env_config"])
@@ -127,12 +167,13 @@ if __name__ == "__main__":
                 policy_mapping_fn=config["policy_mapping_fn"],
             )
         )
+
         algo = ppo_config.build()
         for _ in range(config["num_iterations"]):
             result = algo.train()
             tune.report(mean_reward=result["episode_reward_mean"])
         algo.stop()
-
+    
     search_space = {
         "gamma": tune.grid_search([0.95, 0.99]),
         "clip_param": tune.grid_search([0.1, 0.2]),
@@ -140,7 +181,7 @@ if __name__ == "__main__":
         "lr": tune.loguniform(1e-5, 1e-3),
         "train_batch_size": tune.choice([1024, 2048]),
         "num_sgd_iter": tune.choice([5, 10, 20]),
-        "env_config": { "max_steps": 1000},  # Example environment config
+        "env_config": {"max_steps": 1000}, # Example environment config
         "policies": {
             f"agent_{i}": (None, env.observation_space[f"agent_{i}"], env.action_space[f"agent_{i}"], {}) for i in range(env.num_intersections)
         },
@@ -155,11 +196,12 @@ if __name__ == "__main__":
         grace_period=10,
         reduction_factor=2,
     )
+
     tuner = tune.Tuner(
         trainable,
         param_space=search_space,
         tune_config=tune.TuneConfig(
-            num_samples=10,  # Number of configurations to sample
+            num_samples=10, # Number of configurations to sample
             scheduler=scheduler,
         ),
         run_config=RunConfig(),
@@ -168,83 +210,47 @@ if __name__ == "__main__":
     # Run tuning
     results = tuner.fit()
 
-    # Create and train PPO algorithm
-    # ppo = PPO(config=ppo_config)
+def tune_hyperparameters():
+    tuner = tune.Tuner(
+        "PPO",
+        param_space={
+            "env": "TrafficSignalEnv",
+            "env_config": env_config,
+            "framework": "torch",
+            "gamma": tune.grid_search([0.95, 0.99]),
+            "train_batch_size": tune.grid_search([1024, 2048]),
+            "minibatch_size": tune.choice([128, 256, 512]),
+            "num_sgd_iter": tune.grid_search([10, 20]),
+            "lr": tune.loguniform(1e-5, 1e-3),
+            "entropy_coeff": tune.grid_search([0.01, 0.05, 0.1]),
+            "multiagent": {
+                "policies": policies,
+                "policy_mapping_fn": policy_mapping_fn,
+            },
+            "num_workers": 2,
+        },
+        tune_config=tune.TuneConfig(
+            metric="episode_reward_mean",
+            mode="max",
+            scheduler=ASHAScheduler(
+                max_t=25,
+                grace_period=5,
+                reduction_factor=2,
+            ),
+            num_samples=5, # Number of configurations to try
+        ),
+        run_config=RunConfig(
+            name="TrafficSignal_PPO_Tuning",
+            storage_path=str(storage_path),
+            verbose=1,
+        ),
+    )
 
-    # # Training loop
-    # with open("training_log.txt", "w") as log_file:
-    #     for i in range(50):  # Number of training iterations
-    #         result = ppo.train()
+    results = tuner.fit()
+    best_result = results.get_best_result()
+    print("Best hyperparameters: ", best_result.config)
+    print("Best mean reward: ", best_result.metrics["episode_reward_mean"])
 
-    #         log_file.write(f"\nIteration {i}\n")
-    #         # print(f"\nIteration {i}")
-
-    #         # print(f"\tTraining Info:")
-    #         # print(f"\t\tTime This Iteration: " + str(result["time_this_iter_s"]) + "s")
-    #         # print(f"\t\tTotal Time: " + str(result["time_total_s"]) + "s")
-            
-    #         # print(f"\tAgent Metrics:")
-    #         # for i in range(len(result["info"]["learner"])):
-    #         #     print(f"\t\tAgent {i}")
-    #         #     info_learner = result["info"]["learner"][f"agent_{i}"]["learner_stats"]
-    #             # print(f"\t\t\tTotal Loss: " + str(info_learner["total_loss"]) + ", " + "Policy Loss: " + str(info_learner["policy_loss"]) + ", " + "VF Loss: " + str(info_learner["vf_loss"]) + ", " + "Entropy: " + str(info_learner["entropy"]) + ", " + "KL: " + str(info_learner["kl"]) + ", " + "Current Learning Rate: " + str(info_learner["cur_lr"]) + ", " + "VF Explained by Value Function: " + str(info_learner["vf_explained_var"]))
-    #             # print(f"\t\t\tTotal Loss: " + str(info_learner["total_loss"]) + " (how well agent is learning overall)")
-    #             # print(f"\t\t\tPolicy Loss: " + str(info_learner["policy_loss"]) + " (indicates agent's optimization on policy)")
-    #             # print(f"\t\t\tVF Loss: " + str(info_learner["vf_loss"]) + " (optimization of value function)")
-    #             # print(f"\t\t\tEntropy: " + str(info_learner["entropy"]) + " (insight into exploration, higher entropy means more exploration)")
-    #             # print(f"\t\t\tKL: " + str(info_learner["kl"]) + " (measures divergence between current policy and previous policies, useful for stability monitoring)")
-    #             # print(f"\t\t\tCurrent Learning Rate: " + str(info_learner["cur_lr"]) + " (current learning rate, helps identify if learning rate schedules are being applied correctly)")
-    #             # print(f"\t\t\tVF Explained by Value Function: " + str(info_learner["vf_explained_var"]) + " (variance explained by value function, assessing model performance)")
-
-    #         env_runners = result["env_runners"]
-    #         # print(f"\tEnvironment Metrics:")
-    #         # print(f"\t\tMean Reward: " + str(env_runners["episode_reward_mean"]) + ", " + "Mean Episode Length: " + str(env_runners["episode_len_mean"]))
-    #         log_file.write(f"\tMean Reward: {env_runners['episode_reward_mean']} (average reward per episode, reflecting overall performance)\n")
-    #         # print(f"\tMean Reward: " + str(env_runners["episode_reward_mean"]) + " (average reward per episode, reflecting overall performance)")
-    #         # print(f"\t\tMean Episode Length: " + str(env_runners["episode_len_mean"]) + " (average length of episodes, indicating task difficulty or agent efficiency)")
-            
-    #         # print(f"\tSystem Metrics:")
-    #         # print(f"\t\tLearn Time: " + str(result["timers"]["learn_time_ms"]) + "ms, " + "Steps Sampled: " + str(result["num_env_steps_sampled"]) + ", " + "Throughput: " + str(result["timers"]["learn_throughput"]) + " steps/s")
-    #         # print(f"\t\tLearn Time: " + str(result["timers"]["learn_time_ms"]) + "ms (time spent in learning phase per iteration)")
-    #         # print(f"\t\tSteps Sampled: " + str(result["num_env_steps_sampled"]) + " (progress of sampling in environment)")
-    #         # print(f"\t\tThroughput: " + str(result["timers"]["learn_throughput"]) + " steps/s (measures training throughput, reflecting efficiency)")
-
-    #         # print(f"Iteration {i}: Mean Reward = {result['episode_reward_mean']}")
-
-    # # Save trained model
-    # ppo.save("mappo_traffic_model")
-
-
-
-    #####################################################################################
-
-
-    # from traffic_env import TrafficSignalEnv
-    # from stable_baselines3 import PPO
-    # # from stable_baselines3.common.env_checker import check_env
-    # from stable_baselines3.common.monitor import Monitor
-    # from stable_baselines3.common.evaluation import evaluate_policy
-
-    # # Check the custom environment for compatibility issues
-    # base_env = TrafficSignalEnv(max_steps=1000, centralized=False)  # Adjust max_steps or centralized based on preference
-    # env = Monitor(base_env)
-    # # check_env(env)
-
-    # model = PPO(
-    #     policy='MlpPolicy',
-    #     env=env,
-    #     n_steps=2048,  # Number of steps to run for each update
-    #     batch_size=64,  # Size of minibatches for SGD
-    #     gae_lambda=0.95,  # Generalized Advantage Estimation parameter
-    #     gamma=0.99,  # Discount factor
-    #     clip_range=0.2,  # PPO clipping range
-    #     ent_coef=0.01,  # Entropy coefficient to encourage exploration
-    #     vf_coef=0.5,  # Value function coefficient
-    #     max_grad_norm=0.5,  # Max norm for gradient clipping
-    #     verbose=1  # Show training progress
-    # )
-    # model.learn(total_timesteps=100000)
-
-    # mean_reward, std_reward = evaluate_policy(model, env, n_eval_episodes=10)
-
-    # print(f"Mean reward: {mean_reward} +/- {std_reward}")
+# train_PPO()
+# tune_PPO()
+tune_hyperparameters() # Similar to the code you had from earlier, just tried to organize it and make it a bit simpler and quicker, but it's still having some errors
