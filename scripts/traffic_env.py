@@ -6,6 +6,7 @@ import numpy as np
 import json
 import os
 from collections import defaultdict
+from statistics import mean
 
 class TrafficSignalEnv(MultiAgentEnv):
 # class TrafficSignalEnv(gymnasium.Env):
@@ -24,7 +25,7 @@ class TrafficSignalEnv(MultiAgentEnv):
         self.num_lanes = sum([len(self.roads[road]) for road in self.roads])
         self.max_lanes = max([sum(len(self.roads[road]) for road in intersection["roads"]) * 2 for intersection in self.intersections])
 
-        self.previous_vehicle_count = self.engine.get_vehicle_count()
+        self.previous_vehicle_count = 0
         # self.max_observed_waiting_count = 0
         # self.max_observed_vehicle_count = 0
         # self.max_observed_throughput = 0
@@ -44,7 +45,6 @@ class TrafficSignalEnv(MultiAgentEnv):
 
     def reset(self, *, seed=None, options=None):
         self.engine.reset()
-        self.previous_vehicle_count = self.engine.get_vehicle_count()
         observations = {
             f"agent_{i}": self._get_observation_for_agent(i) for i in range(self.num_intersections)
         }
@@ -57,7 +57,6 @@ class TrafficSignalEnv(MultiAgentEnv):
             self.engine.set_tl_phase(self.intersections[intersection_id]["id"], action)
         # self._apply_actions(actions)
         self.engine.next_step()
-        self.previous_vehicle_count = self.engine.get_vehicle_count()
         observations = {
             f"agent_{i}": self._get_observation_for_agent(i) for i in range(self.num_intersections)
         }
@@ -145,8 +144,6 @@ class TrafficSignalEnv(MultiAgentEnv):
     def _get_rewards(self):
         rewards = []
         lane_waiting_counts = self.engine.get_lane_waiting_vehicle_count()
-        print(f"current:{self.engine.get_vehicle_count()}")
-        print(f"prev:{self.previous_vehicle_count}")
         throughput = max(0,(self.previous_vehicle_count - self.engine.get_vehicle_count()) / self.num_intersections)
 
         # Pre-defined constants (useful for now, eventually need to implement dynamic normalization during runtime when switching to larger grid sizes)
@@ -170,21 +167,41 @@ class TrafficSignalEnv(MultiAgentEnv):
     def _is_done(self):
         return self.engine.get_current_time() >= self.max_steps
 
+# Baseline: Fixed Signal Durations
+def fixed_signal_control(env):
+    env.reset()
+    total_reward = 0
+    done = False
+    step = 0  # Initialize a step counter
+    while not done:
+        # Cycle through fixed phases based on the step counter
+        actions = {f"agent_{i}": step % env.action_space[f"agent_{i}"].n for i in range(env.num_intersections)}
+        obs, reward, terminated, truncated, info = env.step(actions)
+        total_reward += sum(reward.values())
+        done = terminated["__all__"]
+        step += 1  # Increment the step counter
+    return total_reward
+
+
 if __name__ == "__main__":
     config_file = "../configs/basic/basic_config.json"
     road_network_file = "../configs/basic/basic_road_network.json"
     max_steps = 100
     env = TrafficSignalEnv(max_steps, config_file, road_network_file)
 
-    obs = env.reset()
-    done = False
-    total_reward = 0
-    while not done:
-        action = env.action_space.sample()  # Random action
-        obs, reward, _, done, info = env.step(action)
-        print(f"Step Reward: {reward}")
-        total_reward += reward
-    print(f"Total Reward for Random Actions: {total_reward}")
+    # obs = env.reset()
+    # done = False
+    # total_reward = 0
+    # while not done:
+    #     action = env.action_space.sample()  # Random action
+    #     obs, reward, _, done, info = env.step(action)
+    #     mean_reward = mean(reward.values())
+    #     print(f"Step Reward: {mean_reward}")
+    #     total_reward += mean_reward
+    # print(f"Total Mean Reward for Random Actions: {total_reward}")
+
+    fixed_rewards = fixed_signal_control(env)
+    print(fixed_rewards)
 
 
     # while not done:
