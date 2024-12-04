@@ -161,7 +161,7 @@ class TrafficSignalEnv(MultiAgentEnv):
             normalized_waiting_count = total_waiting_count / MAX_WAITING_COUNT
             normalized_vehicle_count = total_vehicle_count / MAX_VEHICLE_COUNT
             normalized_throughput = throughput / MAX_THROUGHPUT
-            reward = 0.1 - 0.5 * normalized_waiting_count - 0.5 * normalized_vehicle_count + 2.0 * normalized_throughput
+            reward = 0.1 - 0.5 * normalized_waiting_count - 0.5 * normalized_vehicle_count + 5.0 * normalized_throughput
             rewards.append(reward)
         
         self.previous_vehicle_count = self.engine.get_vehicle_count()
