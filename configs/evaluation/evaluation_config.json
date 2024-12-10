@@ -1,0 +1,12 @@
+{
+	"interval": 1.0,
+	"seed": 0,
+	"dir": "../configs/",
+	"roadnetFile": "training/training_road_network.json", 
+	"flowFile": "training/training_flow.json", 
+	"rlTrafficLight": true,
+	"laneChange": false,
+	"saveReplay": true,
+	"roadnetLogFile": "../logs/evaluation_logs/evaluation_road_network_log.json", 
+	"replayLogFile": "../logs/evaluation_logs/evaluation_replay.txt"
+}

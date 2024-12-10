@@ -63,7 +63,8 @@ NEXT STEPS:
 
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 os.environ["RLLIB_DISABLE_NEW_API_STACK"] = "True"
-storage_path = Path("../logs/ray_results").resolve().as_posix()
+training_logs = Path("../logs/training_logs").resolve().as_posix()
+tuning_logs = Path("../logs/tuning_logs").resolve().as_posix()
 
 # Define environment configuration
 env_config = {
@@ -114,7 +115,7 @@ def train_PPO():
     ppo = PPO(config=ppo_config)
 
     # Training loop
-    with open("training_log.txt", "w") as log_file:
+    with open("../logs/training_logs/training_log.txt", "w") as log_file:
         for i in range(50): # Number of training iterations
             result = ppo.train()
 
@@ -146,6 +147,9 @@ def train_PPO():
             # log_file.write(f"\t\tLearn Time: " + str(result["timers"]["learn_time_ms"]) + "ms (time spent in learning phase per iteration)")
             # log_file.write(f"\t\tSteps Sampled: " + str(result["num_env_steps_sampled"]) + " (progress of sampling in environment)")
             # log_file.write(f"\t\tThroughput: " + str(result["timers"]["learn_throughput"]) + " steps/s (measures training throughput, reflecting efficiency)")
+
+    trained_policy = ppo.save()
+    return trained_policy, ppo_config
 
 def tune_PPO():
     def trainable(config):
@@ -241,7 +245,7 @@ def tune_hyperparameters():
         ),
         run_config=RunConfig(
             name="TrafficSignal_PPO_Tuning",
-            storage_path=str(storage_path),
+            storage_path=str(tuning_logs),
             verbose=1,
         ),
     )
@@ -251,6 +255,38 @@ def tune_hyperparameters():
     print("Best hyperparameters: ", best_result.config)
     print("Best mean reward: ", best_result.metrics["episode_reward_mean"])
 
-# train_PPO()
+def evaluate_policy(trained_policy, ppo_config):
+    ppo = PPO(config=ppo_config)
+    ppo.restore(trained_policy)
+
+    env_config = {
+        "max_steps": 1000,
+        "config_file": "../configs/evaluation/evaluation_config.json"
+    }
+
+    # Register custom environment
+    def env_creator(config):
+        return TrafficSignalEnv(**config)
+
+    register_env("TrafficSignalEnv", env_creator)
+
+    # Create the multi-agent policies configuration
+    env = TrafficSignalEnv(**env_config)
+    obs, _  = env.reset()
+
+    done = False
+    step = 0
+
+    while not done:
+        actions = {
+            agent_id: ppo.compute_single_action(obs[agent_id], policy_id=agent_id) for agent_id in obs.keys()
+        }
+
+        obs, reward, terminated, truncated, info = env.step(actions)
+        done = terminated["__all__"]
+        step += 1
+
+trained_policy, ppo_config = train_PPO()
 # tune_PPO()
-tune_hyperparameters() # Similar to the code you had from earlier, just tried to organize it and make it a bit simpler and quicker, but it's still having some errors
+# tune_hyperparameters()
+evaluate_policy(trained_policy, ppo_config)

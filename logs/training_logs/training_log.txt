@@ -1,0 +1,150 @@
+
+Iteration 0
+	Mean Reward: nan (average reward per episode, reflecting overall performance)
+
+Iteration 1
+	Mean Reward: 1008.0408736378563 (average reward per episode, reflecting overall performance)
+
+Iteration 2
+	Mean Reward: 1008.0408736378563 (average reward per episode, reflecting overall performance)
+
+Iteration 3
+	Mean Reward: 997.6730108971493 (average reward per episode, reflecting overall performance)
+
+Iteration 4
+	Mean Reward: 997.6730108971493 (average reward per episode, reflecting overall performance)
+
+Iteration 5
+	Mean Reward: 989.2733881300693 (average reward per episode, reflecting overall performance)
+
+Iteration 6
+	Mean Reward: 989.2733881300693 (average reward per episode, reflecting overall performance)
+
+Iteration 7
+	Mean Reward: 985.5989886550235 (average reward per episode, reflecting overall performance)
+
+Iteration 8
+	Mean Reward: 985.5989886550235 (average reward per episode, reflecting overall performance)
+
+Iteration 9
+	Mean Reward: 984.6892707866846 (average reward per episode, reflecting overall performance)
+
+Iteration 10
+	Mean Reward: 984.6892707866846 (average reward per episode, reflecting overall performance)
+
+Iteration 11
+	Mean Reward: 989.262183099468 (average reward per episode, reflecting overall performance)
+
+Iteration 12
+	Mean Reward: 989.262183099468 (average reward per episode, reflecting overall performance)
+
+Iteration 13
+	Mean Reward: 989.6974581760608 (average reward per episode, reflecting overall performance)
+
+Iteration 14
+	Mean Reward: 989.6974581760608 (average reward per episode, reflecting overall performance)
+
+Iteration 15
+	Mean Reward: 989.9418505793781 (average reward per episode, reflecting overall performance)
+
+Iteration 16
+	Mean Reward: 989.9418505793781 (average reward per episode, reflecting overall performance)
+
+Iteration 17
+	Mean Reward: 993.1659969978942 (average reward per episode, reflecting overall performance)
+
+Iteration 18
+	Mean Reward: 993.1659969978942 (average reward per episode, reflecting overall performance)
+
+Iteration 19
+	Mean Reward: 996.2336463464704 (average reward per episode, reflecting overall performance)
+
+Iteration 20
+	Mean Reward: 996.2336463464704 (average reward per episode, reflecting overall performance)
+
+Iteration 21
+	Mean Reward: 999.1313616177457 (average reward per episode, reflecting overall performance)
+
+Iteration 22
+	Mean Reward: 999.1313616177457 (average reward per episode, reflecting overall performance)
+
+Iteration 23
+	Mean Reward: 1001.3374601930649 (average reward per episode, reflecting overall performance)
+
+Iteration 24
+	Mean Reward: 1001.3374601930649 (average reward per episode, reflecting overall performance)
+
+Iteration 25
+	Mean Reward: 1005.6467078180455 (average reward per episode, reflecting overall performance)
+
+Iteration 26
+	Mean Reward: 1005.6467078180455 (average reward per episode, reflecting overall performance)
+
+Iteration 27
+	Mean Reward: 1013.5285097189361 (average reward per episode, reflecting overall performance)
+
+Iteration 28
+	Mean Reward: 1013.5285097189361 (average reward per episode, reflecting overall performance)
+
+Iteration 29
+	Mean Reward: 1020.791253358712 (average reward per episode, reflecting overall performance)
+
+Iteration 30
+	Mean Reward: 1020.791253358712 (average reward per episode, reflecting overall performance)
+
+Iteration 31
+	Mean Reward: 1028.8102938055135 (average reward per episode, reflecting overall performance)
+
+Iteration 32
+	Mean Reward: 1028.8102938055135 (average reward per episode, reflecting overall performance)
+
+Iteration 33
+	Mean Reward: 1036.2026056896127 (average reward per episode, reflecting overall performance)
+
+Iteration 34
+	Mean Reward: 1036.2026056896127 (average reward per episode, reflecting overall performance)
+
+Iteration 35
+	Mean Reward: 1046.7888864009565 (average reward per episode, reflecting overall performance)
+
+Iteration 36
+	Mean Reward: 1046.7888864009565 (average reward per episode, reflecting overall performance)
+
+Iteration 37
+	Mean Reward: 1053.753712258704 (average reward per episode, reflecting overall performance)
+
+Iteration 38
+	Mean Reward: 1053.753712258704 (average reward per episode, reflecting overall performance)
+
+Iteration 39
+	Mean Reward: 1062.5599937957163 (average reward per episode, reflecting overall performance)
+
+Iteration 40
+	Mean Reward: 1062.5599937957163 (average reward per episode, reflecting overall performance)
+
+Iteration 41
+	Mean Reward: 1076.4092377415964 (average reward per episode, reflecting overall performance)
+
+Iteration 42
+	Mean Reward: 1090.974828332587 (average reward per episode, reflecting overall performance)
+
+Iteration 43
+	Mean Reward: 1090.974828332587 (average reward per episode, reflecting overall performance)
+
+Iteration 44
+	Mean Reward: 1105.8872789660365 (average reward per episode, reflecting overall performance)
+
+Iteration 45
+	Mean Reward: 1105.8872789660365 (average reward per episode, reflecting overall performance)
+
+Iteration 46
+	Mean Reward: 1124.1290557203813 (average reward per episode, reflecting overall performance)
+
+Iteration 47
+	Mean Reward: 1124.1290557203813 (average reward per episode, reflecting overall performance)
+
+Iteration 48
+	Mean Reward: 1140.54861453202 (average reward per episode, reflecting overall performance)
+
+Iteration 49
+	Mean Reward: 1140.54861453202 (average reward per episode, reflecting overall performance)
