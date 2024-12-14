@@ -7,59 +7,8 @@ from ray.tune.registry import register_env
 from traffic_env import TrafficSignalEnv
 import warnings
 import os
+import csv
 from pathlib import Path
-
-"""
-NEXT STEPS:
-1. Run training loop (at bottom of this file), print out different parts of 'result' to make sure rewards and other things are reasonable
-    - Make sure observations, rewards are in correct format
-    - Make sure rewards are not extreme values/NaN
-2. Use ppo.evaluate() or create new evaluation loop to simulate a few episodes with trained model
-    - Consider metrics like total reward over episodes, average waiting time per vehicle, throughput, congestion, etc.
-    - Can compare results against basic rule-based system to see if rewards are improving
-3. Tune hyperparameters
-    - Adjust training parameters like gamma, train_batch_size, minibatch_size, num_epochs, grad_clip, clip_param
-    - Add entropy_coeff parameter to encourage exploration early in training
-    - Add num_sgd_iter parameter (number of gradient updates per iteration)
-    - Experiment with lower or higher learning rates to observe their effect on stability
-    - Experiment w/ shared policies (all agents share single policy) vs. independent policies (unique policy for each agent)
-    - Can use grid search or Ray Tune for automated hyperparameter tuning
-        from ray.tune import run
-        run(PPO, config={"env": "TrafficSignalEnv", "gamma": tune.grid_search([0.95, 0.99]), "lambda": tune.grid_search([0.9, 0.95]),}, stop={"training_iteration": 100},)
-4. Monitor training behavior
-    - Detect issues like slow convergence or unstable training
-    - Plot rewards over time to see if algorithm is learning
-    - Save and analyze traffic metrics during training
-    - Use RLib's built-in tensorboard logging:
-        tensorboard --logdir ~/ray_results
-    - Is reward improving over time? Are vehicles clearing intersections effectively as training progresses?
-5. Scale up problem
-    - Test on larger grids w/ more intersections, vehicles, and complex traffic flows
-    - Increase grid size using generate_grid_scenario.py
-    - Increase number of agents (intersections) and ensure centralized critic handles larger state space
-    - Does training process scale efficiently?
-    - Does policy learned on small grid generalize to larger grids?
-    - Can add waiting time feature for vehicles to observation space
-    - Implement dynamic normalization for features during runtime for larger grid sizes instead of pre-defined constants
-6. Add realistic scenarios
-    - Test under different traffic scenarios
-    - Vary traffic density (simulate peak and off-peak traffic conditions)
-    - Test edge cases (high vehicle inflow, blocked roads, traffic jams)
-7. Fine-tune reward function
-    - Ensure reward function minimizes congestion, maximizes throughput
-    - Monitor components of reward function (normalized metrics)
-    - Adjust coefficients for better balance
-    - Add additional penalties or bonuses to steer policy more effectively
-8. Validate system
-    - Compare performance with baseline methods (fixed signal durations, rule-based strategies, random signal switching)
-9. Save and load models
-    - Save trained policy for future use:
-        ppo.save(path_to_model)
-    - Load model and test in new script
-10. Document results
-    - Log findings from baseline comparisons, hyperparameter tuning, real-world scenario tests
-    - Include visualizations (graphs of rewards, traffic replays, etc.) to showcase improvements
-"""
 
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 os.environ["RLLIB_DISABLE_NEW_API_STACK"] = "True"
@@ -89,37 +38,40 @@ policies = {
 def policy_mapping_fn(agent_id, episode, **kwargs):
     return agent_id
 
-def train_PPO():
-    # Initialize PPOConfig and apply configurations
-    ppo_config = (
-        PPOConfig()
-        .environment(env="TrafficSignalEnv", env_config=env_config)
-        .framework("torch")
-        .env_runners(num_env_runners=4, rollout_fragment_length="auto")
-        .training(
-            gamma=0.99, # Discount factor
-            train_batch_size=2048, # Total batch size for training
-            minibatch_size=64, # Minibatch size
-            num_epochs=10, # Number of epochs to iterate over each batch
-            grad_clip=0.5, # Gradient clipping value
-            clip_param=0.2, # Clipping parameter for PPO
-        )
-        .multi_agent(
-            policies=policies,
-            policy_mapping_fn=policy_mapping_fn,
-        )
-        .api_stack(enable_rl_module_and_learner=False, enable_env_runner_and_connector_v2=False)
+ppo_config = (
+    PPOConfig()
+    .environment(env="TrafficSignalEnv", env_config=env_config)
+    .framework("torch")
+    .env_runners(num_env_runners=4, rollout_fragment_length="auto")
+    .training(
+        gamma=0.99, # Discount factor
+        train_batch_size=2048, # Total batch size for training
+        minibatch_size=64, # Minibatch size
+        num_epochs=10, # Number of epochs to iterate over each batch
+        grad_clip=0.5, # Gradient clipping value
+        clip_param=0.2, # Clipping parameter for PPO
     )
+    .multi_agent(
+        policies=policies,
+        policy_mapping_fn=policy_mapping_fn,
+    )
+    .api_stack(enable_rl_module_and_learner=False, enable_env_runner_and_connector_v2=False)
+)
 
+def train_PPO():
     # Create and train PPO algorithm
     ppo = PPO(config=ppo_config)
 
     # Training loop
-    with open("../logs/training_logs/training_log.txt", "w") as log_file:
+    # with open("../logs/training_logs/training_log.txt", "w") as log_file:
+    with open("../logs/training_logs/training_data.csv", "w", newline="") as data_file:
+        writer = csv.writer(data_file)
+        writer.writerow(["Training Iteration", "Mean Reward"])
         for i in range(50): # Number of training iterations
+            print(f"Training {i}")
             result = ppo.train()
 
-            log_file.write(f"\nIteration {i}\n")
+            # log_file.write(f"\nIteration {i}\n")
 
             # log_file.write(f"\tTraining Info:")
             # log_file.write(f"\t\tTime This Iteration: " + str(result["time_this_iter_s"]) + "s")
@@ -138,8 +90,9 @@ def train_PPO():
             #     log_file.write(f"\t\t\tVF Explained by Value Function: " + str(info_learner["vf_explained_var"]) + " (variance explained by value function, assessing model performance)")
 
             env_runners = result["env_runners"]
+            writer.writerow([i, env_runners["episode_reward_mean"]])
             # log_file.write(f"\tEnvironment Metrics:")
-            log_file.write(f"\tMean Reward: " + str(env_runners['episode_reward_mean']) + " (average reward per episode, reflecting overall performance)\n")
+            # log_file.write(f"\tMean Reward: " + str(env_runners['episode_reward_mean']) + " (average reward per episode, reflecting overall performance)\n")
             # log_file.write(f"\t\tMean Reward: " + str(env_runners["episode_reward_mean"]) + " (average reward per episode, reflecting overall performance)")
             # log_file.write(f"\t\tMean Episode Length: " + str(env_runners["episode_len_mean"]) + " (average length of episodes, indicating task difficulty or agent efficiency)")
 
@@ -148,13 +101,12 @@ def train_PPO():
             # log_file.write(f"\t\tSteps Sampled: " + str(result["num_env_steps_sampled"]) + " (progress of sampling in environment)")
             # log_file.write(f"\t\tThroughput: " + str(result["timers"]["learn_throughput"]) + " steps/s (measures training throughput, reflecting efficiency)")
 
-    trained_policy = ppo.save()
-    return trained_policy, ppo_config
+    ppo.save("../models/ppo_trained_model")
 
 def tune_PPO():
     def trainable(config):
         # Initialize PPOConfig and apply configurations
-        ppo_config = (
+        ppo_tune_config = (
             PPOConfig()
             .environment(env="TrafficSignalEnv", env_config=config["env_config"])
             .framework("torch")
@@ -172,7 +124,7 @@ def tune_PPO():
             )
         )
 
-        algo = ppo_config.build()
+        algo = ppo_tune_config.build()
         for _ in range(config["num_iterations"]):
             result = algo.train()
             tune.report(mean_reward=result["episode_reward_mean"])
@@ -255,9 +207,9 @@ def tune_hyperparameters():
     print("Best hyperparameters: ", best_result.config)
     print("Best mean reward: ", best_result.metrics["episode_reward_mean"])
 
-def evaluate_policy(trained_policy, ppo_config):
+def evaluate_policy():
     ppo = PPO(config=ppo_config)
-    ppo.restore(trained_policy)
+    ppo.restore("../models/ppo_trained_model")
 
     env_config = {
         "max_steps": 1000,
@@ -273,20 +225,28 @@ def evaluate_policy(trained_policy, ppo_config):
     # Create the multi-agent policies configuration
     env = TrafficSignalEnv(**env_config)
     obs, _  = env.reset()
-
+    total_reward = 0
     done = False
     step = 0
 
-    while not done:
-        actions = {
-            agent_id: ppo.compute_single_action(obs[agent_id], policy_id=agent_id) for agent_id in obs.keys()
-        }
+    with open("../data/ppo_rewards.csv", mode="w", newline="") as file:
+        writer = csv.writer(file)
+        writer.writerow(["Step", "Total Reward"])
+        while not done:
+            print(step)
+            actions = {
+                agent_id: ppo.compute_single_action(obs[agent_id], policy_id=agent_id) for agent_id in obs.keys()
+            }
+            obs, reward, terminated, truncated, info = env.step(actions)
+            total_reward += sum(reward.values())
+            writer.writerow([step, total_reward])
+            done = terminated["__all__"]
+            step += 1
+    
+    return total_reward
 
-        obs, reward, terminated, truncated, info = env.step(actions)
-        done = terminated["__all__"]
-        step += 1
-
-trained_policy, ppo_config = train_PPO()
-# tune_PPO()
-# tune_hyperparameters()
-evaluate_policy(trained_policy, ppo_config)
+if __name__ == "__main__":
+    # train_PPO()
+    # tune_PPO()
+    # tune_hyperparameters()
+    evaluate_policy()

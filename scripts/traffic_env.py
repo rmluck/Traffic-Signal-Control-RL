@@ -5,6 +5,7 @@ from ray.rllib.env.multi_agent_env import MultiAgentEnv
 import numpy as np
 import json
 import os
+import csv
 from collections import defaultdict
 from statistics import mean
 
@@ -125,13 +126,17 @@ def fixed_signal_control(env):
     total_reward = 0
     done = False
     step = 0  # Initialize a step counter
-    while not done:
-        # Cycle through fixed phases based on the step counter
-        actions = {f"agent_{i}": step % env.action_space[f"agent_{i}"].n for i in range(env.num_intersections)}
-        obs, reward, terminated, truncated, info = env.step(actions)
-        total_reward += sum(reward.values())
-        done = terminated["__all__"]
-        step += 1  # Increment the step counter
+    with open("../data/fixed_rewards.csv", mode="w", newline="") as file:
+        writer = csv.writer(file)
+        writer.writerow(["Step", "Total Reward"])
+        while not done:
+            # Cycle through fixed phases based on the step counter
+            actions = {f"agent_{i}": step % env.action_space[f"agent_{i}"].n for i in range(env.num_intersections)}
+            obs, reward, terminated, truncated, info = env.step(actions)
+            total_reward += sum(reward.values())
+            writer.writerow([step, total_reward])
+            done = terminated["__all__"]
+            step += 1  # Increment the step counter
     return total_reward
 
 if __name__ == "__main__":
